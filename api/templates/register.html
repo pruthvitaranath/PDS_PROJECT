@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register</title>
+  
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <style>
+    body {
+      background-color: #f8f9fa;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .register-container {
+      background: #ffffff;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      max-width: 500px;
+      width: 100%;
+    }
+    .register-container h1 {
+      font-size: 1.8rem;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .form-control:focus {
+      box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+    }
+    .btn-primary {
+      background-color: #0d6efd;
+      border: none;
+    }
+    .btn-primary:hover {
+      background-color: #0a58ca;
+    }
+  </style>
+</head>
+<body>
+  <div class="register-container">
+    <h1>Register</h1>
+    <form id="registerForm" class="needs-validation" novalidate>
+      <div class="mb-3">
+        <label for="userName" class="form-label">Username</label>
+        <input type="text" id="userName" name="userName" class="form-control" required>
+        <div class="invalid-feedback">Please enter your username.</div>
+      </div>
+      
+      <div class="mb-3">
+        <label for="password" class="form-label">Password</label>
+        <input type="password" id="password" name="password" class="form-control" required>
+        <div class="invalid-feedback">Please enter your password.</div>
+      </div>
+
+      <div class="mb-3">
+        <label for="fname" class="form-label">First Name</label>
+        <input type="text" id="fname" name="fname" class="form-control" required>
+        <div class="invalid-feedback">Please enter your first name.</div>
+      </div>
+
+      <div class="mb-3">
+        <label for="lname" class="form-label">Last Name</label>
+        <input type="text" id="lname" name="lname" class="form-control" required>
+        <div class="invalid-feedback">Please enter your last name.</div>
+      </div>
+
+      <div class="mb-3">
+        <label for="email" class="form-label">Email</label>
+        <input type="email" id="email" name="email" class="form-control" required>
+        <div class="invalid-feedback">Please enter a valid email address.</div>
+      </div>
+
+      <div class="mb-3">
+        <label for="designation" class="form-label">Designation</label>
+        <select id="designation" name="designation" class="form-control" required>
+          <option value="">Select Designation</option>
+          <option value="STAFF">STAFF</option>
+          <option value="CLIENT">CLIENT</option>
+          <option value="VOLUNTEER">VOLUNTEER</option>
+          <option value="DONOR">DONOR</option>
+        </select>
+        <div class="invalid-feedback">Please select your designation.</div>
+      </div>
+
+      <button type="submit" class="btn btn-primary w-100">Register</button>
+    </form>
+    <p id="message" class="text-center mt-3 text-danger"></p>
+    <p class="text-center mt-3">
+      Already have an account? <a href="/login">Login here</a>
+    </p>
+  </div>
+
+  <!-- Bootstrap Bundle with Popper -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  
+  <script>
+    // Bootstrap form validation
+    (function () {
+      'use strict';
+      const forms = document.querySelectorAll('.needs-validation');
+      Array.from(forms).forEach((form) => {
+        form.addEventListener('submit', function (event) {
+          if (!form.checkValidity()) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+          form.classList.add('was-validated');
+        }, false);
+      });
+    })();
+
+    // Register form submission
+    const form = document.getElementById('registerForm');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      if (!form.checkValidity()) return;
+
+      const formData = new FormData(form);
+      const data = Object.fromEntries(formData.entries());
+
+      try {
+        const response = await fetch('http://127.0.0.1:8000/api/register/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+
+        const result = await response.json();
+        const messageElement = document.getElementById('message');
+        if (response.ok) {
+          messageElement.textContent = result.message;
+          messageElement.className = "text-center mt-3 text-success";
+        } else {
+          messageElement.textContent = result.error || 'Registration failed.';
+          messageElement.className = "text-center mt-3 text-danger";
+        }
+      } catch (error) {
+        document.getElementById('message').textContent = 'An error occurred. Please try again.';
+      }
+    });
+  </script>
+</body>
+</html>

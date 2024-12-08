@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Management</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 20px;
+        }
+        input[type="text"], input[type="number"], button {
+            margin-bottom: 10px;
+            padding: 8px;
+        }
+        button {
+            background-color: green;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: darkgreen;
+        }
+        #responseMessage {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Order Management</h1>
+
+    <!-- Start an Order Form -->
+    <form id="startOrderForm">
+        <h2>Start an Order</h2>
+        <label for="userName">Staff Username:</label>
+        <input type="text" id="userName" name="userName" required>
+
+        <label for="clientUser">Client Username:</label>
+        <input type="text" id="clientUser" name="clientUser" required>
+
+        <button type="submit">Start Order</button>
+    </form>
+
+    <!-- Add to Current Order Form -->
+    <form id="addToOrderForm" style="display:none;">
+        <h2>Add to Current Order</h2>
+        <p id="currentOrderID"></p> <!-- Display the current order ID -->
+
+        <label for="itemID">Item ID:</label>
+        <input type="number" id="itemID" name="itemID" required>
+
+        <button type="submit">Add to Order</button>
+    </form>
+
+    <!-- Response Message -->
+    <div id="responseMessage"></div>
+</div>
+
+<script>
+// Handle "Start an Order"
+document.getElementById('startOrderForm').addEventListener('submit', async function (e) {
+    e.preventDefault(); // Prevent default form submission
+
+    const formData = new FormData(document.getElementById('startOrderForm'));
+    
+    try {
+        const response = await fetch('/api/start-order/', {
+            method: 'POST',
+            body: formData,
+        });
+
+        const result = await response.json();
+        
+        if (response.ok) {
+            // Display success message and show Add to Current Order form
+            document.getElementById('responseMessage').textContent =
+                `Order started successfully! Order ID: ${result.orderID}`;
+            document.getElementById('responseMessage').style.color = "green";
+
+            // Show Add to Current Order form and display current order ID
+            document.getElementById('addToOrderForm').style.display = "block";
+            document.getElementById('currentOrderID').textContent =
+                `Current Order ID: ${result.orderID}`;
+            
+            // Save the order ID in a hidden field for later use
+            sessionStorage.setItem('currentOrderID', result.orderID);
+        } else {
+            throw new Error(result.error || "An error occurred while starting the order.");
+        }
+    } catch (error) {
+        document.getElementById('responseMessage').textContent = error.message;
+        document.getElementById('responseMessage').style.color = "red";
+    }
+});
+
+// Handle "Add to Current Order"
+document.getElementById('addToOrderForm').addEventListener('submit', async function (e) {
+    e.preventDefault(); // Prevent default form submission
+
+    const formData = new FormData(document.getElementById('addToOrderForm'));
+
+    // Get the current order ID from session storage
+    const currentOrderID = sessionStorage.getItem('currentOrderID');
+    
+    if (!currentOrderID) {
+        document.getElementById('responseMessage').textContent =
+            "No active order found. Please start an order first.";
+        document.getElementById('responseMessage').style.color = "red";
+        return;
+    }
+
+    // Append the current order ID to the form data
+    formData.append("orderID", currentOrderID);
+
+    try {
+        const response = await fetch('/api/add-to-order/', {
+            method: 'POST',
+            body: formData,
+        });
+
+        const result = await response.json();
+        
+        if (response.ok) {
+            document.getElementById('responseMessage').textContent =
+                result.message || "Item added successfully!";
+            document.getElementById('responseMessage').style.color = "green";
+
+            // Optionally reset the Add to Current Order form
+            document.getElementById('addToOrderForm').reset();
+        } else {
+            throw new Error(result.error || "An error occurred while adding the item.");
+        }
+    } catch (error) {
+        document.getElementById('responseMessage').textContent = error.message;
+        document.getElementById('responseMessage').style.color = "red";
+    }
+});
+</script>
+</body>
+</html>

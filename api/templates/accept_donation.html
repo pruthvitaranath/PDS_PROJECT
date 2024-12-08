@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accept Donation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+        }
+        input[type="text"], input[type="number"], textarea, select {
+            margin-bottom: 10px;
+            padding: 8px;
+            width: 100%;
+        }
+        button {
+            background-color: green;
+            color: white;
+            border: none;
+            padding: 10px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: darkgreen;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Accept Donation</h1>
+    <form id="donationForm">
+        <!-- CSRF Token -->
+        {% csrf_token %}
+
+        <!-- Staff Username -->
+        <label for="userName">Staff Username:</label>
+        <input type="text" id="userName" name="userName" required>
+
+        <!-- Donor Username -->
+        <label for="donorID">Donor Username:</label>
+        <input type="text" id="donorID" name="donorID" required>
+
+        <!-- Item Description -->
+        <label for="itemDescription">Item Description:</label>
+        <textarea id="itemDescription" name="itemDescription" required></textarea>
+
+        <!-- Photo -->
+        <label for="photo">Photo:</label>
+        <input type="text" id="photo" name="photo">
+
+        <!-- Color -->
+        <label for="color">Color:</label>
+        <input type="text" id="color" name="color">
+
+        <!-- Is New -->
+        <label for="isNew">Is New:</label>
+        <select id="isNew" name="isNew">
+          <option value="true">Yes</option>
+          <option value="false">No</option>
+        </select>
+
+        <!-- Has Pieces -->
+        <label for="hasPieces">Has Pieces:</label>
+        <select id="hasPieces" name="hasPieces">
+          <option value="true">Yes</option>
+          <option value="false">No</option>
+        </select>
+
+        <!-- Material -->
+        <label for="material">Material:</label>
+        <input type="text" id="material" name="material">
+
+        <!-- Main Category -->
+        <label for="mainCategory">Main Category:</label>
+        <input type="text" id="mainCategory" name="mainCategory" required>
+
+        <!-- Sub Category -->
+        <label for="subCategory">Sub Category:</label>
+        <input type="text" id="subCategory" name="subCategory" required>
+
+        <!-- Pieces Container -->
+        <div id="piecesContainer"></div>
+
+        <!-- Add Piece Button -->
+        <button type="button" id="addPieceButton">Add Piece</button>
+
+        <!-- Submit Button -->
+        <button type="submit">Submit Donation</button>
+    </form>
+
+    <!-- Response Message -->
+    <div id="responseMessage"></div>
+</div>
+
+<script>
+// Track the number of pieces
+let pieceCount = 0;
+
+// Add a new piece form dynamically
+document.getElementById('addPieceButton').addEventListener('click', function () {
+    pieceCount++;
+    const piecesContainer = document.getElementById('piecesContainer');
+    
+    const pieceDiv = document.createElement('div');
+    pieceDiv.innerHTML = `
+      <h3>Piece ${pieceCount}</h3>
+      <label for="pieceDescription_${pieceCount}">Piece Description:</label>
+      <input type="text" id="pieceDescription_${pieceCount}" name="pieceDescription_${pieceCount}" required>
+
+      <label for="length_${pieceCount}">Length (cm):</label>
+      <input type="number" id="length_${pieceCount}" name="length_${pieceCount}" required>
+
+      <label for="width_${pieceCount}">Width (cm):</label>
+      <input type="number" id="width_${pieceCount}" name="width_${pieceCount}" required>
+
+      <label for="height_${pieceCount}">Height (cm):</label>
+      <input type="number" id="height_${pieceCount}" name="height_${pieceCount}" required>
+
+      <label for="roomNum_${pieceCount}">Room Number:</label>
+      <input type="number" id="roomNum_${pieceCount}" name="roomNum_${pieceCount}" required>
+
+      <label for="shelfNum_${pieceCount}">Shelf Number:</label>
+      <input type="number" id="shelfNum_${pieceCount}" name="shelfNum_${pieceCount}" required>
+
+      <label for="pNotes_${pieceCount}">Notes:</label>
+      <textarea id="pNotes_${pieceCount}" name="pNotes_${pieceCount}"></textarea>
+    `;
+    
+    piecesContainer.appendChild(pieceDiv);
+});
+
+// Handle form submission
+document.getElementById('donationForm').addEventListener('submit', async function (e) {
+    e.preventDefault(); // Prevent default form submission
+
+    // Collect form data
+    const formData = new FormData(document.getElementById('donationForm'));
+    formData.append('numPieces', pieceCount); // Add the number of pieces
+
+    // Get CSRF token from hidden input field
+    const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    try {
+        // Send POST request to the Accept Donation API
+        const response = await fetch('/api/accept-donation/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrftoken, // Include CSRF token in headers
+            },
+            body: formData,
+        });
+
+        // Parse and display the response
+        const result = await response.json();
+        
+        if (response.ok) {
+            document.getElementById('responseMessage').textContent = result.message || "Donation accepted successfully!";
+            document.getElementById('responseMessage').style.color = "green";
+            
+            // Optionally reset the form after successful submission
+            document.getElementById('donationForm').reset();
+            document.getElementById('piecesContainer').innerHTML = "";
+            pieceCount = 0; // Reset piece count
+        } else {
+            throw new Error(result.error || "An error occurred while submitting the donation.");
+        }
+    } catch (error) {
+        document.getElementById('responseMessage').textContent = error.message;
+        document.getElementById('responseMessage').style.color = "red";
+    }
+});
+</script>
+
+</body>
+</html>

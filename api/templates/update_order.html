@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Update Order Status</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+        }
+        input[type="text"], select, button {
+            margin-bottom: 10px;
+            padding: 8px;
+        }
+        button {
+            background-color: green;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: darkgreen;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Update Order Status</h1>
+
+    <!-- Update Order Status Form -->
+    <form id="updateOrderForm">
+        <label for="orderID">Order ID:</label>
+        <input type="text" id="orderID" name="orderID" required>
+
+        <label for="status">New Status:</label>
+        <select id="status" name="status" required>
+            <option value="">Select Status</option>
+            <option value="Ready for Delivery">Ready for Delivery</option>
+            <option value="Delivered">Delivered</option>
+        </select>
+
+        <button type="submit">Update Status</button>
+    </form>
+
+    <!-- Response Message -->
+    <div id="responseMessage"></div>
+</div>
+
+<script>
+// Handle "Update Order Status"
+document.getElementById('updateOrderForm').addEventListener('submit', async function (e) {
+    e.preventDefault(); // Prevent default form submission
+
+    const formData = new FormData(document.getElementById('updateOrderForm'));
+
+    try {
+        const response = await fetch('/api/update-order-status/', {
+            method: 'POST',
+            body: formData,
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            document.getElementById('responseMessage').textContent =
+                result.message || 'Order status updated successfully!';
+            document.getElementById('responseMessage').style.color = 'green';
+        } else {
+            throw new Error(result.error || 'Failed to update order status.');
+        }
+    } catch (error) {
+        document.getElementById('responseMessage').textContent = error.message;
+        document.getElementById('responseMessage').style.color = 'red';
+    }
+});
+</script>
+</body>
+</html>

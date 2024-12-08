@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Management</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 20px;
+        }
+        input[type="text"], input[type="number"], select, button {
+            margin-bottom: 10px;
+            padding: 8px;
+        }
+        button {
+            background-color: green;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: darkgreen;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        table th, table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+        table th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Order Management</h1>
+
+    <!-- Start an Order Form -->
+    <form id="startOrderForm">
+        <h2>Start an Order</h2>
+        <label for="userName">Staff Username:</label>
+        <input type="text" id="userName" name="userName" required>
+
+        <label for="clientUser">Client Username:</label>
+        <input type="text" id="clientUser" name="clientUser" required>
+
+        <button type="submit">Start Order</button>
+    </form>
+
+    <!-- Add to Current Order Section -->
+    <div id="addToOrderSection" style="display:none;">
+        <h2>Add to Current Order</h2>
+        
+        <!-- Display Current Order ID -->
+        <p id="currentOrderID"></p>
+
+        <!-- Dropdowns for Categories and Subcategories -->
+        <label for="mainCategory">Main Category:</label>
+        <select id="mainCategory" name="mainCategory">
+            <option value="">Select Main Category</option>
+        </select>
+
+        <label for="subCategory">Sub Category:</label>
+        <select id="subCategory" name="subCategory" disabled>
+            <option value="">Select Sub Category</option>
+        </select>
+
+        <!-- Available Items Table -->
+        <h3>Available Items</h3>
+        <table id="itemsTable">
+            <thead>
+                <tr>
+                    <th>Item ID</th>
+                    <th>Description</th>
+                    <th>Color</th>
+                    <th>Material</th>
+                    <th>Select</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+        <!-- Add-to-Order Button -->
+        <button id="addToOrderButton" style="display:none;">Add Selected Item to Order</button>
+
+    </div>
+
+    <!-- Response Message -->
+    <div id="responseMessage"></div>
+</div>
+
+<script>
+// Fetch categories on page load
+document.addEventListener("DOMContentLoaded", async function () {
+    const mainCategoryDropdown = document.getElementById("mainCategory");
+    
+    try {
+        const response = await fetch('/api/categories/');
+        const data = await response.json();
+
+        if (response.ok) {
+            // Populate main category dropdown
+            const uniqueMainCategories = [...new Set(data.categories.map(cat => cat.mainCategory))];
+            uniqueMainCategories.forEach(mainCategory => {
+                const option = document.createElement("option");
+                option.value = mainCategory;
+                option.textContent = mainCategory;
+                mainCategoryDropdown.appendChild(option);
+            });
+
+            // Enable subcategory dropdown when a main category is selected
+            mainCategoryDropdown.addEventListener("change", function () {
+                const selectedMainCategory = this.value;
+
+                // Clear existing subcategory options
+                const subCategoryDropdown = document.getElementById("subCategory");
+                subCategoryDropdown.innerHTML = '<option value="">Select Sub Category</option>';
+
+                if (selectedMainCategory) {
+                    // Filter subcategories for the selected main category
+                    const filteredSubCategories = data.categories
+                        .filter(cat => cat.mainCategory === selectedMainCategory)
+                        .map(cat => cat.subCategory);
+
+                    // Populate subcategory dropdown
+                    filteredSubCategories.forEach(subCategory => {
+                        const option = document.createElement("option");
+                        option.value = subCategory;
+                        option.textContent = subCategory;
+                        subCategoryDropdown.appendChild(option);
+                    });
+
+                    subCategoryDropdown.disabled = false;
+
+                    // Fetch available items when a subcategory is selected
+                    subCategoryDropdown.addEventListener("change", async function () {
+                        const selectedSubCategory = this.value;
+
+                        if (selectedSubCategory) {
+                            try {
+                                const itemsResponse = await fetch(`/api/items/?mainCategory=${selectedMainCategory}&subCategory=${selectedSubCategory}`);
+                                const itemsData = await itemsResponse.json();
+
+                                if (itemsResponse.ok) {
+                                    // Populate items table
+                                    const itemsTableBody = document.querySelector("#itemsTable tbody");
+                                    itemsTableBody.innerHTML = ""; // Clear existing rows
+
+                                    itemsData.items.forEach(item => {
+                                        const row = document.createElement("tr");
+
+                                        row.innerHTML = `
+                                            <td>${item.ItemID}</td>
+                                            <td>${item.iDescription}</td>
+                                            <td>${item.color}</td>
+                                            <td>${item.material}</td>
+                                            <td><input type="radio" name="selectedItem" value="${item.ItemID}"></td>
+                                        `;
+                                        itemsTableBody.appendChild(row);
+                                    });
+
+                                    // Show Add-to-Order button if there are available items
+                                    document.getElementById("addToOrderButton").style.display =
+                                        itemsData.items.length > 0 ? "block" : "none";
+                                } else {
+                                    throw new Error(itemsData.error || "Failed to load items.");
+                                }
+                            } catch (error) {
+                                console.error(error.message);
+                            }
+                        }
+                    });
+                } else {
+                    document.getElementById("subCategory").disabled = true;
+                }
+            });
+        } else {
+            throw new Error(data.error || "Failed to load categories.");
+        }
+    } catch (error) {
+        console.error(error.message);
+    }
+});
+
+// Handle "Start an Order"
+document.getElementById('startOrderForm').addEventListener('submit', async function (e) {
+    e.preventDefault(); // Prevent default form submission
+
+    const formData = new FormData(document.getElementById('startOrderForm'));
+    
+    try {
+        const response = await fetch('/api/start-order/', {
+            method: 'POST',
+            body: formData,
+        });
+
+        const result = await response.json();
+        
+        if (response.ok) {
+            // Display success message and show Add to Current Order section
+            document.getElementById('responseMessage').textContent =
+                `Order started successfully! Order ID: ${result.orderID}`;
+            document.getElementById('responseMessage').style.color = "green";
+
+            // Show Add to Current Order section and display current order ID
+            document.getElementById('addToOrderSection').style.display = "block";
+            document.getElementById('currentOrderID').textContent =
+                `Current Order ID: ${result.orderID}`;
+            
+            // Save the order ID in session storage for later use
+            sessionStorage.setItem('currentOrderID', result.orderID);
+            
+		}else{throw Error(result.error)}}catch(error){
+	document.querySelector(`#response`).innerText=error.message}})
