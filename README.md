@@ -1,4 +1,4 @@
-# Welcome Home Furniture Bank System
+# Welcome Home System
 
 A web-based system for managing furniture donations, orders, and deliveries for a furniture bank. The system helps coordinate between staff, clients, volunteers, and donors.
 
