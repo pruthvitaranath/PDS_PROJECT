@@ -53,4 +53,8 @@ urlpatterns = [
 
     path('category-rankings/', views.category_rankings_page, name='category_rankings'),
     path('api/category-rankings/', views.category_rankings, name='category_rankings'),
+
+
+    path('api/volunteer-rankings/', views.volunteer_rankings, name='volunteer-rankings'),
+    path('volunteer-rankings/', views.volunteer_rankings_page, name='volunteer-rankings-page'),
 ]

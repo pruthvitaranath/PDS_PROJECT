@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Volunteer Rankings</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    {% csrf_token %}
+    <style>
+        .ranking-card {
+            border-radius: 10px;
+            margin-bottom: 15px;
+            transition: transform 0.2s;
+        }
+        .ranking-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .rank-number {
+            font-size: 1.5em;
+            font-weight: bold;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            color: white;
+        }
+        .rank-1 { background-color: #FFD700; }
+        .rank-2 { background-color: #C0C0C0; }
+        .rank-3 { background-color: #CD7F32; }
+        .stats-badge {
+            font-size: 0.9em;
+            padding: 5px 10px;
+            border-radius: 15px;
+            margin-left: 10px;
+            background-color: #f8f9fa;
+        }
+        .completion-rate {
+            height: 5px;
+            border-radius: 2.5px;
+            background-color: #e9ecef;
+            margin-top: 10px;
+        }
+        .completion-rate-fill {
+            height: 100%;
+            border-radius: 2.5px;
+            background-color: #28a745;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h2 class="mb-4">Volunteer Rankings</h2>
+
+        <!-- Date Range Selector -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Select Time Period</h5>
+                <div class="row">
+                    <div class="col-md-4">
+                        <label for="startDate" class="form-label">Start Date</label>
+                        <input type="date" class="form-control" id="startDate">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="endDate" class="form-label">End Date</label>
+                        <input type="date" class="form-control" id="endDate">
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <button class="btn btn-primary" onclick="loadRankings()">Update Rankings</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rankings Display -->
+        <div id="rankingsList"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize date pickers
+            flatpickr("#startDate", {
+                defaultDate: new Date().setDate(new Date().getDate() - 30)
+            });
+            flatpickr("#endDate", {
+                defaultDate: new Date()
+            });
+            
+            loadRankings();
+        });
+
+        async function loadRankings() {
+            try {
+                const startDate = document.getElementById('startDate').value;
+                const endDate = document.getElementById('endDate').value;
+                
+                const response = await fetch(
+                    `/api/volunteer-rankings/?start_date=${startDate}&end_date=${endDate}`,
+                    {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        credentials: 'same-origin'
+                    }
+                );
+
+                if (!response.ok) throw new Error('Failed to load rankings');
+
+                const data = await response.json();
+                displayRankings(data.rankings);
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Failed to load rankings');
+            }
+        }
+
+        function displayRankings(rankings) {
+            const container = document.getElementById('rankingsList');
+            container.innerHTML = '';
+
+            if (!rankings || rankings.length === 0) {
+                container.innerHTML = '<div class="alert alert-info">No rankings available for this period.</div>';
+                return;
+            }
+
+            rankings.forEach((ranking, index) => {
+                const completionRate = (ranking.completed_deliveries / ranking.total_deliveries) * 100;
+                const card = document.createElement('div');
+                card.className = 'card ranking-card';
+                card.innerHTML = `
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="rank-number rank-${index + 1}">${index + 1}</div>
+                            <div class="flex-grow-1">
+                                <h5 class="card-title mb-1">${ranking.fullName}</h5>
+                                <div class="stats">
+                                    <span class="stats-badge">
+                                        ${ranking.total_deliveries} Total Tasks
+                                    </span>
+                                    <span class="stats-badge">
+                                        ${ranking.completed_deliveries} Completed
+                                    </span>
+                                    <span class="stats-badge">
+                                        ${completionRate.toFixed(1)}% Completion Rate
+                                    </span>
+                                </div>
+                                <div class="completion-rate">
+                                    <div class="completion-rate-fill" style="width: ${completionRate}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function showError(message) {
+            const container = document.getElementById('rankingsList');
+            container.innerHTML = `
+                <div class="alert alert-danger">
+                    ${message}
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html> 

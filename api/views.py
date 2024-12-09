@@ -7,6 +7,7 @@ import random
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 import json
+from django.contrib.auth.decorators import login_required
 
 def login_page(request):
     return render(request, 'login.html')  # Renders login.html
@@ -45,6 +46,8 @@ def staff_dashboard_page(request):
 def client_dashboard_page(request):
     return render(request, 'client_dashboard.html')  # Renders client_dashboard.html
 
+def volunteer_rankings_page(request):
+    return render(request, 'volunteer_rankings.html')
 
 #DB CONNECTION
 def get_db_connection():
@@ -837,6 +840,65 @@ def category_rankings(request):
         
     except Exception as e:
         print(f"Error in category_rankings: {str(e)}")
+        return JsonResponse({
+            'error': str(e)
+        }, status=500)
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()
+
+def volunteer_rankings(request):
+    try:
+        # Get time period from query parameters (default to last 30 days)
+        start_date = request.GET.get('start_date')
+        end_date = request.GET.get('end_date')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Query for volunteer rankings
+        query = """
+            SELECT 
+                p.userName,
+                CONCAT(p.fname, ' ', p.lname) as fullName,
+                COUNT(DISTINCT d.orderID) as total_deliveries,
+                SUM(CASE WHEN d.status = 'DELIVERED' THEN 1 ELSE 0 END) as completed_deliveries,
+                COUNT(DISTINCT o.orderID) as total_orders
+            FROM 
+                Person p
+                JOIN Delivered d ON p.userName = d.userName
+                JOIN Ordered o ON d.orderID = o.orderID
+            WHERE 
+                d.date BETWEEN %s AND %s
+            GROUP BY 
+                p.userName, p.fname, p.lname
+            ORDER BY 
+                total_deliveries DESC,
+                completed_deliveries DESC
+            LIMIT 10
+        """
+        
+        # If dates not provided, use last 30 days
+        if not start_date:
+            cursor.execute("SELECT DATE_SUB(CURRENT_DATE, INTERVAL 30 DAY)")
+            start_date = cursor.fetchone()['DATE_SUB(CURRENT_DATE, INTERVAL 30 DAY)']
+        if not end_date:
+            cursor.execute("SELECT CURRENT_DATE")
+            end_date = cursor.fetchone()['CURRENT_DATE']
+            
+        cursor.execute(query, (start_date, end_date))
+        rankings = cursor.fetchall()
+        
+        return JsonResponse({
+            'start_date': start_date.isoformat() if hasattr(start_date, 'isoformat') else start_date,
+            'end_date': end_date.isoformat() if hasattr(end_date, 'isoformat') else end_date,
+            'rankings': rankings
+        })
+        
+    except Exception as e:
+        print(f"Error in volunteer_rankings: {str(e)}")
         return JsonResponse({
             'error': str(e)
         }, status=500)
