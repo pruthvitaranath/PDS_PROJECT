@@ -3,172 +3,100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Order Management</title>
+    <title>Start Order</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-        }
-        .container {
             max-width: 600px;
-            margin: auto;
+            margin: 20px auto;
+            padding: 20px;
         }
-        form {
-            display: flex;
-            flex-direction: column;
-            margin-bottom: 20px;
+        .form-group {
+            margin-bottom: 15px;
         }
-        input[type="text"], input[type="number"], button {
-            margin-bottom: 10px;
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"] {
+            width: 100%;
             padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
         }
         button {
             background-color: green;
             color: white;
+            padding: 10px 20px;
             border: none;
+            border-radius: 4px;
             cursor: pointer;
+            width: 100%;
+            font-size: 16px;
         }
         button:hover {
             background-color: darkgreen;
         }
-        #responseMessage {
+        .error {
+            color: red;
             margin-top: 10px;
-            font-weight: bold;
         }
     </style>
-    {% csrf_token %}
 </head>
 <body>
-<div class="container">
-    <h1>Order Management</h1>
-
-    <!-- Start an Order Form -->
+    <h1>Start an Order</h1>
     <form id="startOrderForm">
-        <h2>Start an Order</h2>
-        <label for="userName">Staff Username:</label>
-        <input type="text" id="userName" name="userName" required>
+        {% csrf_token %}
+        
+        <div class="form-group">
+            <label for="userName">Staff Username:</label>
+            <input type="text" id="userName" name="userName" required>
+        </div>
 
-        <label for="clientUser">Client Username:</label>
-        <input type="text" id="clientUser" name="clientUser" required>
+        <div class="form-group">
+            <label for="clientUser">Client Username:</label>
+            <input type="text" id="clientUser" name="clientUser" required>
+        </div>
 
         <button type="submit">Start Order</button>
     </form>
 
-    <!-- Add to Current Order Form -->
-    <form id="addToOrderForm" style="display:none;">
-        <h2>Add to Current Order</h2>
-        <p id="currentOrderID"></p> <!-- Display the current order ID -->
+    <div id="errorMessage" class="error"></div>
 
-        <label for="itemID">Item ID:</label>
-        <input type="number" id="itemID" name="itemID" required>
-
-        <button type="submit">Add to Order</button>
-    </form>
-
-    <!-- Response Message -->
-    <div id="responseMessage"></div>
-</div>
-
-<script>
-// Add this function at the top of your script section to get CSRF token
-function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-            const cookie = cookies[i].trim();
-            if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
-        }
-    }
-    return cookieValue;
-}
-
-// Handle "Start an Order"
-document.getElementById('startOrderForm').addEventListener('submit', async function (e) {
-    e.preventDefault(); // Prevent default form submission
-
-    const formData = new FormData(document.getElementById('startOrderForm'));
-    
-    try {
-        const response = await fetch('/api/start-order/', {
-            method: 'POST',
-            body: formData,
-        });
-
-        const result = await response.json();
-        
-        if (response.ok) {
-            // Display success message and show Add to Current Order form
-            document.getElementById('responseMessage').textContent =
-                `Order started successfully! Order ID: ${result.orderID}`;
-            document.getElementById('responseMessage').style.color = "green";
-
-            // Show Add to Current Order form and display current order ID
-            document.getElementById('addToOrderForm').style.display = "block";
-            document.getElementById('currentOrderID').textContent =
-                `Current Order ID: ${result.orderID}`;
+    <script>
+        document.getElementById('startOrderForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
             
-            // Save the order ID in a hidden field for later use
-            sessionStorage.setItem('currentOrderID', result.orderID);
-        } else {
-            throw new Error(result.error || "An error occurred while starting the order.");
-        }
-    } catch (error) {
-        document.getElementById('responseMessage').textContent = error.message;
-        document.getElementById('responseMessage').style.color = "red";
-    }
-});
+            const formData = {
+                userName: document.getElementById('userName').value,
+                clientUser: document.getElementById('clientUser').value
+            };
 
-// Handle "Add to Current Order"
-document.getElementById('addToOrderForm').addEventListener('submit', async function (e) {
-    e.preventDefault();
+            try {
+                const response = await fetch('/api/start-order/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify(formData)
+                });
 
-    const formData = new FormData();
-    
-    const currentOrderID = sessionStorage.getItem('currentOrderID');
-    const itemID = document.getElementById('itemID').value;
-    
-    if (!currentOrderID) {
-        document.getElementById('responseMessage').textContent =
-            "No active order found. Please start an order first.";
-        document.getElementById('responseMessage').style.color = "red";
-        return;
-    }
+                const data = await response.json();
 
-    formData.append("orderID", currentOrderID);
-    formData.append("itemID", itemID);
-
-    try {
-        const response = await fetch('/api/add-to-order/', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': getCookie('csrftoken'),  // Add CSRF token
-                'X-Requested-With': 'XMLHttpRequest'
-            },
-            body: formData,
-            credentials: 'same-origin'
+                if (response.ok) {
+                    // Store the order ID and redirect to add items page
+                    localStorage.setItem('currentOrderID', data.orderID);
+                    window.location.href = '/add-to-order';
+                } else {
+                    throw new Error(data.error || 'Failed to start order');
+                }
+            } catch (error) {
+                document.getElementById('errorMessage').textContent = error.message;
+            }
         });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const result = await response.json();
-        
-        document.getElementById('responseMessage').textContent =
-            result.message || "Item added successfully!";
-        document.getElementById('responseMessage').style.color = "green";
-
-        document.getElementById('addToOrderForm').reset();
-    } catch (error) {
-        console.error('Error:', error);
-        document.getElementById('responseMessage').textContent = 
-            "Error adding item to order. Please try again.";
-        document.getElementById('responseMessage').style.color = "red";
-    }
-});
-</script>
+    </script>
 </body>
 </html>

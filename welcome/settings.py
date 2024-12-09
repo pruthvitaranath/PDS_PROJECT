@@ -79,7 +79,7 @@ DATABASES = {
         'ENGINE': 'mysql.connector.django',  # Use mysql.connector.django for mysql-connector-python
         'NAME': 'welcome_home',             # Name of your MySQL database
         'USER': 'root',                  # MySQL username
-        'PASSWORD': 'Chamundi@123',         # MySQL password
+        'PASSWORD': 'nirmal14125',         # MySQL password
         'HOST': '127.0.0.1',                # Host (use localhost or IP)
         'PORT': '3306',                     # Default MySQL port
     }

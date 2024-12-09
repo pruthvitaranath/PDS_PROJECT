@@ -54,7 +54,7 @@ def get_db_connection():
     return mysql.connector.connect(
         host="localhost",
         user="root",
-        password="Chamundi@123",
+        password="nirmal14125",
         database="welcome_home"
     )
 
@@ -367,56 +367,78 @@ def accept_donation(request):
 def start_order(request):
     if request.method == "POST":
         try:
-            user_name = request.POST.get("userName")
-            client_user = request.POST.get("clientUser")
+            # Parse JSON data instead of form data
+            data = json.loads(request.body)
+            user_name = data.get("userName")
+            client_user = data.get("clientUser")
 
             conn = get_db_connection()
             cursor = conn.cursor()
 
-            # Check if staff member
-            staff_check_query = """
-                SELECT COUNT(*) 
-                FROM Act 
-                WHERE userName = %s AND roleID = 'staff'
-            """
-            cursor.execute(staff_check_query, (user_name,))
-            is_staff = cursor.fetchone()[0]
+            try:
+                # Start transaction
+                conn.start_transaction()
 
-            if not is_staff:
-                return JsonResponse({"error": "User is not authorized"}, status=403)
+                # Check if staff member
+                staff_check_query = """
+                    SELECT COUNT(*) 
+                    FROM Act 
+                    WHERE userName = %s AND roleID = 'STAFF'
+                """
+                cursor.execute(staff_check_query, (user_name,))
+                is_staff = cursor.fetchone()[0]
 
-            # Check if client exists
-            client_check_query = """
-                SELECT COUNT(*) 
-                FROM Person 
-                WHERE userName = %s
-            """
-            cursor.execute(client_check_query, (client_user,))
-            is_valid_client = cursor.fetchone()[0]
+                if not is_staff:
+                    return JsonResponse({"error": "User is not authorized"}, status=403)
 
-            if not is_valid_client:
-                return JsonResponse({"error": "Invalid client username"}, status=404)
+                # Check if client exists and is a CLIENT
+                client_check_query = """
+                    SELECT COUNT(*) 
+                    FROM Person p
+                    JOIN Act a ON p.userName = a.userName
+                    WHERE p.userName = %s AND a.roleID = 'CLIENT'
+                """
+                cursor.execute(client_check_query, (client_user,))
+                is_valid_client = cursor.fetchone()[0]
 
-            # Generate order ID and save it in session
-            order_id = random.randint(1000, 9999)
+                if not is_valid_client:
+                    return JsonResponse({"error": "Invalid client username"}, status=404)
 
-            # Insert into Ordered table
-            insert_order_query = """
-                INSERT INTO Ordered (orderID, orderDate, supervisor, client)
-                VALUES (%s, CURDATE(), %s, %s)
-            """
-            cursor.execute(insert_order_query, (order_id, user_name, client_user))
-            conn.commit()
+                # Generate unique order ID
+                while True:
+                    order_id = random.randint(1000, 9999)
+                    cursor.execute("SELECT COUNT(*) FROM Ordered WHERE orderID = %s", (order_id,))
+                    if cursor.fetchone()[0] == 0:
+                        break
 
-            return JsonResponse({"message": "Order started successfully", "orderID": order_id}, status=201)
+                # Insert into Ordered table
+                insert_order_query = """
+                    INSERT INTO Ordered (orderID, orderDate, supervisor, client)
+                    VALUES (%s, CURDATE(), %s, %s)
+                """
+                cursor.execute(insert_order_query, (order_id, user_name, client_user))
+
+                # Commit transaction
+                conn.commit()
+
+                return JsonResponse({
+                    "message": "Order started successfully", 
+                    "orderID": order_id
+                }, status=201)
+
+            except Exception as e:
+                conn.rollback()
+                raise e
 
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error in start_order: {e}")
             return JsonResponse({"error": str(e)}, status=500)
 
         finally:
-            cursor.close()
-            conn.close()
+            if 'cursor' in locals():
+                cursor.close()
+            if 'conn' in locals():
+                conn.close()
 
     return JsonResponse({"error": "Invalid request method"}, status=405)
 

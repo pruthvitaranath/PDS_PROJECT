@@ -84,8 +84,21 @@
     </style>
 </head>
 <body>
+    
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary"></nav>
+        <div class="container">
+            <a class="navbar-brand">Client Dashboard</a>
+            <div class="navbar-nav ms-auto">
+                <span class="nav-item nav-link text-light" id="staffName"></span>
+                <button class="btn btn-outline-light" onclick="logout()">Logout</button>
+            </div>
+        </div>
+    </nav>
+    
     <div class="container">
+        
         <!-- Welcome Section -->
+
         <div class="welcome-section">
             <h2 class="mb-0">Welcome, <span id="clientName"></span></h2>
             <p class="text-muted mb-0">Manage your donation orders</p>
