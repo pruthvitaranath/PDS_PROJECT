@@ -406,43 +406,88 @@ def start_order(request):
 def add_to_order(request):
     if request.method == "POST":
         try:
-            order_id = request.POST.get("orderID")
-            item_id = request.POST.get("itemID")
+            # Try to get data from JSON first
+            try:
+                data = json.loads(request.body)
+                order_id = data.get("orderID")
+                item_id = data.get("itemID")
+            except json.JSONDecodeError:
+                # If JSON parsing fails, try form data
+                order_id = request.POST.get("orderID")
+                item_id = request.POST.get("itemID")
+
+            if not order_id or not item_id:
+                return JsonResponse({
+                    "error": "Missing required fields"
+                }, status=400)
 
             conn = get_db_connection()
             cursor = conn.cursor()
 
-            # Check if the item is already in the 'ItemIn' table
-            query_check_item = """
-                SELECT COUNT(*) 
-                FROM ItemIn 
-                WHERE ItemID = %s AND orderID = %s
-            """
-            cursor.execute(query_check_item, (item_id, order_id))
-            is_already_ordered = cursor.fetchone()[0] > 0
+            try:
+                # Check if the order exists
+                order_check_query = """
+                    SELECT COUNT(*) 
+                    FROM Ordered 
+                    WHERE orderID = %s
+                """
+                cursor.execute(order_check_query, (order_id,))
+                if cursor.fetchone()[0] == 0:
+                    return JsonResponse({
+                        "error": f"Order {order_id} does not exist"
+                    }, status=404)
 
-            if is_already_ordered:
-                return JsonResponse({"error": f"Item {item_id} is already in order {order_id}"}, status=400)
+                # Check if the item exists
+                item_check_query = """
+                    SELECT COUNT(*) 
+                    FROM Item 
+                    WHERE ItemID = %s
+                """
+                cursor.execute(item_check_query, (item_id,))
+                if cursor.fetchone()[0] == 0:
+                    return JsonResponse({
+                        "error": f"Item {item_id} does not exist"
+                    }, status=404)
 
-            # Insert item into ItemIn table
-            insert_item_query = """
-                INSERT INTO ItemIn (ItemID, orderID) 
-                VALUES (%s, %s)
-            """
-            cursor.execute(insert_item_query, (item_id, order_id))
-            conn.commit()
+                # Check if the item is already in the order
+                query_check_item = """
+                    SELECT COUNT(*) 
+                    FROM ItemIn 
+                    WHERE ItemID = %s AND orderID = %s
+                """
+                cursor.execute(query_check_item, (item_id, order_id))
+                is_already_ordered = cursor.fetchone()[0] > 0
 
-            return JsonResponse({"message": f"Item {item_id} added to order {order_id}"}, status=200)
+                if is_already_ordered:
+                    return JsonResponse({
+                        "error": f"Item {item_id} is already in order {order_id}"
+                    }, status=400)
+
+                # Insert item into ItemIn table
+                insert_item_query = """
+                    INSERT INTO ItemIn (ItemID, orderID) 
+                    VALUES (%s, %s)
+                """
+                cursor.execute(insert_item_query, (item_id, order_id))
+                conn.commit()
+
+                return JsonResponse({
+                    "message": f"Item {item_id} added to order {order_id}"
+                }, status=200)
+
+            finally:
+                cursor.close()
+                conn.close()
 
         except Exception as e:
-            print(f"Error: {e}")
-            return JsonResponse({"error": str(e)}, status=500)
+            print(f"Error in add_to_order: {e}")
+            return JsonResponse({
+                "error": str(e)
+            }, status=500)
 
-        finally:
-            cursor.close()
-            conn.close()
-
-    return JsonResponse({"error": "Invalid request method"}, status=405)
+    return JsonResponse({
+        "error": "Invalid request method"
+    }, status=405)
 
 
 @csrf_exempt
@@ -684,63 +729,6 @@ def get_available_items(request):
             cursor.close()
         if 'conn' in locals():
             conn.close()
-
-@ensure_csrf_cookie
-def add_to_order(request):
-    if request.method == "POST":
-        try:
-            # Get data from request.POST instead of parsing body
-            order_id = request.POST.get("orderID")
-            item_id = request.POST.get("itemID")
-
-            if not order_id or not item_id:
-                return JsonResponse({
-                    "error": "Missing required fields"
-                }, status=400)
-
-            conn = get_db_connection()
-            cursor = conn.cursor()
-
-            try:
-                # Check if the item is already in the 'ItemIn' table
-                query_check_item = """
-                    SELECT COUNT(*) 
-                    FROM ItemIn 
-                    WHERE ItemID = %s AND orderID = %s
-                """
-                cursor.execute(query_check_item, (item_id, order_id))
-                is_already_ordered = cursor.fetchone()[0] > 0
-
-                if is_already_ordered:
-                    return JsonResponse({
-                        "error": f"Item {item_id} is already in order {order_id}"
-                    }, status=400)
-
-                # Insert item into ItemIn table
-                insert_item_query = """
-                    INSERT INTO ItemIn (ItemID, orderID) 
-                    VALUES (%s, %s)
-                """
-                cursor.execute(insert_item_query, (item_id, order_id))
-                conn.commit()
-
-                return JsonResponse({
-                    "message": f"Item {item_id} added to order {order_id}"
-                }, status=200)
-
-            finally:
-                cursor.close()
-                conn.close()
-
-        except Exception as e:
-            print(f"Error in add_to_order: {e}")
-            return JsonResponse({
-                "error": str(e)
-            }, status=500)
-
-    return JsonResponse({
-        "error": "Invalid request method"
-    }, status=405)
 
 @require_http_methods(["POST"])
 def validate_order(request):
