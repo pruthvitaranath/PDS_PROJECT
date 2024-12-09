@@ -5,6 +5,8 @@ import json
 import mysql.connector
 import random
 from django.shortcuts import render
+from django.views.decorators.http import require_http_methods
+import json
 
 def login_page(request):
     return render(request, 'login.html')  # Renders login.html
@@ -33,6 +35,8 @@ def prepare_order_page(request):
 def update_order_status_page(request):
     return render(request, 'update_order.html')  # Renders update_order.html
 
+def find_order_items_page(request):
+    return render(request, 'find_order_items.html')  # Renders find_order_items.html
 
 #DASHBOARDS
 def staff_dashboard_page(request):
@@ -40,7 +44,6 @@ def staff_dashboard_page(request):
 
 def client_dashboard_page(request):
     return render(request, 'client_dashboard.html')  # Renders client_dashboard.html
-
 
 
 #DB CONNECTION
@@ -112,6 +115,18 @@ def login(request):
             cursor.close()
             conn.close()
 
+@csrf_exempt
+def logout(request):
+    if request.method == "POST":
+        try:
+            # Clear the session data
+            request.session.flush()
+            return JsonResponse({"message": "Logout successful"}, status=200)
+        except Exception as e:
+            print(f"Error during logout: {e}")
+            return JsonResponse({"error": "An error occurred during logout"}, status=500)
+
+    return JsonResponse({"error": "Invalid request method"}, status=405)
 
 # Register API
 @csrf_exempt
@@ -220,27 +235,21 @@ def find_order_items(request, order_id):
         conn.close()
 
 
+#@csrf_exempt
 def accept_donation(request):
-    if request.method == "POST":
-        print("Accept Donation endpoint invoked")  # Debug print statement
 
+    print("accept donation api invoked")
+    if request.method == "POST":
         conn = get_db_connection()
         cursor = conn.cursor()
 
         try:
             # Parse input data
-            user_name = request.POST.get("userName")  # Staff member username
-            donor_id = request.POST.get("donorID")  # Donor's username
-            item_description = request.POST.get("itemDescription")
-            photo = request.POST.get("photo")
-            color = request.POST.get("color")
-            is_new = request.POST.get("isNew", "true").lower() == "true"
-            has_pieces = request.POST.get("hasPieces", "false").lower() == "true"
-            material = request.POST.get("material")
-            main_category = request.POST.get("mainCategory")
-            sub_category = request.POST.get("subCategory")
-
-            print(f"Received data: user_name={user_name}, donor_id={donor_id}, item_description={item_description}")
+            data = json.loads(request.body)
+            user_name = data.get("userName")  # Staff member username
+            donor_id = data.get("donorID")  # Donor's username
+            item_data = data.get("itemData")  # List of items donated
+            pieces_data = data.get("piecesData")  # List of pieces for each item
 
             # Step 1: Check if the user is a staff member
             staff_check_query = """
@@ -250,8 +259,6 @@ def accept_donation(request):
             """
             cursor.execute(staff_check_query, (user_name,))
             is_staff = cursor.fetchone()[0]
-
-            print(f"Is staff: {is_staff}")
 
             if not is_staff:
                 return JsonResponse({"error": "User is not authorized to accept donations"}, status=403)
@@ -265,109 +272,66 @@ def accept_donation(request):
             cursor.execute(donor_check_query, (donor_id,))
             is_donor_registered = cursor.fetchone()[0]
 
-            print(f"Is donor registered: {is_donor_registered}")
-
             if not is_donor_registered:
                 return JsonResponse({"error": "Donor is not registered"}, status=404)
 
-            # Step 3: Check if category exists in Category table
-            category_check_query = """
-                SELECT COUNT(*) 
-                FROM Category 
-                WHERE mainCategory = %s AND subCategory = %s
-            """
-            cursor.execute(category_check_query, (main_category, sub_category))
-            category_exists = cursor.fetchone()[0]
+            # Step 3: Process each donated item and store in the database
+            for item in item_data:
+                i_description = item.get("description")
+                photo = item.get("photo")
+                color = item.get("color")
+                is_new = item.get("isNew", True)
+                has_pieces = item.get("hasPieces", False)
+                material = item.get("material")
+                main_category = item.get("mainCategory")
+                sub_category = item.get("subCategory")
 
-            print(f"Does category exist: {category_exists}")
-
-            # If category does not exist, insert it into Category table
-            if not category_exists:
-                insert_category_query = """
-                    INSERT INTO Category (mainCategory, subCategory, catNotes)
-                    VALUES (%s, %s, %s)
+                # Insert into Item table and get the auto-incremented ItemID
+                insert_item_query = """
+                    INSERT INTO Item (iDescription, photo, color, isNew, hasPieces, material, mainCategory, subCategory)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """
-                cursor.execute(insert_category_query, (main_category, sub_category, "Auto-generated by donation"))
+                cursor.execute(insert_item_query, (i_description, photo, color, is_new, has_pieces, material, main_category, sub_category))
                 conn.commit()
-                print(f"Inserted new category: {main_category} - {sub_category}")
+                item_id = cursor.lastrowid  # Get the auto-incremented ItemID
 
-            # Step 4: Insert item into Item table
-            insert_item_query = """
-                INSERT INTO Item (iDescription, photo, color, isNew, hasPieces, material, mainCategory, subCategory)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """
-            cursor.execute(insert_item_query, (item_description, photo, color,
-                                               is_new, has_pieces,
-                                               material,
-                                               main_category,
-                                               sub_category))
-            conn.commit()
-            item_id = cursor.lastrowid  # Get the auto-incremented ItemID
+                # Insert into DonatedBy table
+                insert_donated_by_query = """
+                    INSERT INTO DonatedBy (ItemID, userName, donateDate)
+                    VALUES (%s, %s, CURDATE())
+                """
+                cursor.execute(insert_donated_by_query, (item_id, donor_id))
+                conn.commit()
 
-            print(f"Inserted item with ID: {item_id}")
+                # Step 4: Process pieces for this item (if applicable)
+                if has_pieces:
+                    for piece in pieces_data:
+                        piece_num = piece.get("pieceNum")
+                        p_description = piece.get("description")
+                        length = piece.get("length")
+                        width = piece.get("width")
+                        height = piece.get("height")
+                        room_num = piece.get("roomNum")
+                        shelf_num = piece.get("shelfNum")
+                        p_notes = piece.get("notes")
 
-            # Step 5: Insert into DonatedBy table
-            insert_donated_by_query = """
-                INSERT INTO DonatedBy (ItemID, userName, donateDate)
-                VALUES (%s, %s, CURDATE())
-            """
-            cursor.execute(insert_donated_by_query, (item_id, donor_id))
-            conn.commit()
-
-            print(f"Inserted donation record for item ID {item_id} by donor {donor_id}")
-
-            # Step 6: Process pieces for this item (if applicable)
-            if has_pieces:
-                num_pieces = int(request.POST.get("numPieces", 0))
-                print(f"Processing {num_pieces} pieces")
-
-                for i in range(1, num_pieces + 1):
-                    piece_num = i
-                    p_description = request.POST.get(f"pieceDescription_{i}")
-                    length = int(request.POST.get(f"length_{i}", 0))
-                    width = int(request.POST.get(f"width_{i}", 0))
-                    height = int(request.POST.get(f"height_{i}", 0))
-                    room_num = int(request.POST.get(f"roomNum_{i}", 0))
-                    shelf_num = int(request.POST.get(f"shelfNum_{i}", 0))
-                    p_notes = request.POST.get(f"pNotes_{i}")
-
-                    print(f"Inserting piece {piece_num}: room={room_num}, shelf={shelf_num}")
-
-                    insert_piece_query = """
-                        INSERT INTO Piece (ItemID, pieceNum, pDescription,
-                                           length,
-                                           width,
-                                           height,
-                                           roomNum,
-                                           shelfNum,
-                                           pNotes)
-                        VALUES (%s, %s, %s,
-                                %s,
-                                %s,
-                                %s,
-                                %s,
-                                %s,
-                                %s)
-                    """
-                    cursor.execute(insert_piece_query,
-                                   (item_id,
-                                    piece_num,
-                                    p_description,
-                                    length,
-                                    width,
-                                    height,
-                                    room_num,
-                                    shelf_num,
-                                    p_notes))
-                    conn.commit()
-
-                    print(f"Inserted piece {piece_num} for item ID {item_id}")
+                        insert_piece_query = """
+                            INSERT INTO Piece (ItemID, pieceNum, pDescription, length, width, height, roomNum, shelfNum, pNotes)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """
+                        cursor.execute(insert_piece_query,
+                                       (item_id, piece_num, p_description,
+                                        length, width,
+                                        height,
+                                        room_num,
+                                        shelf_num,
+                                        p_notes))
+                        conn.commit()
 
             return JsonResponse({"message": "Donation accepted successfully"}, status=201)
 
         except Exception as e:
             conn.rollback()
-            print(f"Error: {e}")  # Log the error for debugging
             return JsonResponse({"error": str(e)}, status=500)
 
         finally:
@@ -463,121 +427,6 @@ def add_to_order(request):
                 VALUES (%s, %s)
             """
             cursor.execute(insert_item_query, (item_id, order_id))
-            conn.commit()
-
-            return JsonResponse({"message": f"Item {item_id} added to order {order_id}"}, status=200)
-
-        except Exception as e:
-            print(f"Error: {e}")
-            return JsonResponse({"error": str(e)}, status=500)
-
-        finally:
-            cursor.close()
-            conn.close()
-
-    return JsonResponse({"error": "Invalid request method"}, status=405)
-
-
-from django.http import JsonResponse
-
-def get_categories(request):
-    if request.method == "GET":
-        try:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-
-            # Query to fetch all categories and subcategories
-            query = """
-                SELECT mainCategory, subCategory 
-                FROM Category
-            """
-            cursor.execute(query)
-            categories = cursor.fetchall()
-
-            # Format the response as a list of dictionaries
-            response_data = [{"mainCategory": row[0], "subCategory": row[1]} for row in categories]
-
-            return JsonResponse({"categories": response_data}, status=200)
-
-        except Exception as e:
-            print(f"Error: {e}")
-            return JsonResponse({"error": str(e)}, status=500)
-
-        finally:
-            cursor.close()
-            conn.close()
-
-    return JsonResponse({"error": "Invalid request method"}, status=405)
-
-
-def get_available_items(request):
-    if request.method == "GET":
-        try:
-            main_category = request.GET.get("mainCategory")
-            sub_category = request.GET.get("subCategory")
-
-            conn = get_db_connection()
-            cursor = conn.cursor()
-
-            # Query to fetch items in the given category/subcategory that are not yet ordered
-            query = """
-                SELECT ItemID, iDescription, color, material 
-                FROM Item 
-                WHERE mainCategory = %s AND subCategory = %s 
-                AND ItemID NOT IN (SELECT ItemID FROM ItemIn)
-            """
-            cursor.execute(query, (main_category, sub_category))
-            items = cursor.fetchall()
-
-            # Format the response as a list of dictionaries
-            response_data = [
-                {"ItemID": row[0], "iDescription": row[1], "color": row[2], "material": row[3]}
-                for row in items
-            ]
-
-            return JsonResponse({"items": response_data}, status=200)
-
-        except Exception as e:
-            print(f"Error: {e}")
-            return JsonResponse({"error": str(e)}, status=500)
-
-        finally:
-            cursor.close()
-            conn.close()
-
-    return JsonResponse({"error": "Invalid request method"}, status=405)
-
-
-
-@csrf_exempt
-def add_to_order(request):
-    if request.method == "POST":
-        try:
-            order_id = request.POST.get("orderID")  # Order ID from session or frontend
-            item_id = request.POST.get("itemID")  # Item ID to add
-
-            conn = get_db_connection()
-            cursor = conn.cursor()
-
-            # Check if the item is already in the 'ItemIn' table for this order
-            query_check_item = """
-                SELECT COUNT(*) 
-                FROM ItemIn 
-                WHERE ItemID = %s AND orderID = %s
-            """
-            cursor.execute(query_check_item, (item_id, order_id))
-            is_already_ordered = cursor.fetchone()[0] > 0
-
-            if is_already_ordered:
-                return JsonResponse({"error": f"Item {item_id} is already in order {order_id}"}, status=400)
-
-            # Insert item into ItemIn table
-            insert_item_query = """
-                INSERT INTO ItemIn (ItemID, orderID) 
-                VALUES (%s, %s)
-            """
-            cursor.execute(insert_item_query, (item_id, order_id))
-            
             conn.commit()
 
             return JsonResponse({"message": f"Item {item_id} added to order {order_id}"}, status=200)
@@ -719,3 +568,280 @@ def update_order_status(request):
             conn.close()
 
     return JsonResponse({"error": "Invalid request method"}, status=405)
+
+
+
+
+@require_http_methods(["GET"])
+def get_categories(request):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        query = """
+            SELECT DISTINCT 
+                mainCategory,
+                subCategory
+            FROM 
+                Item
+            WHERE 
+                mainCategory IS NOT NULL 
+                AND subCategory IS NOT NULL
+            ORDER BY 
+                mainCategory, 
+                subCategory
+        """
+        
+        cursor.execute(query)
+        categories = cursor.fetchall()
+        
+        # Debug print
+        print("Categories from database:", categories)
+        
+        return JsonResponse({
+            'categories': categories
+        })
+        
+    except Exception as e:
+        print("Error in get_categories:", str(e))  # Debug print
+        return JsonResponse({
+            'error': str(e)
+        }, status=500)
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()
+
+@require_http_methods(["GET"])
+def get_available_items(request):
+    try:
+        main_category = request.GET.get('mainCategory')
+        sub_category = request.GET.get('subCategory')
+        
+        if not main_category or not sub_category:
+            return JsonResponse({
+                'error': 'Both mainCategory and subCategory are required'
+            }, status=400)
+            
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Query using your actual schema
+        query = """
+            SELECT 
+                i.ItemID,
+                i.iDescription as Description,  -- Changed to match your schema
+                i.color as Color,
+                i.material as Material,
+                i.isNew,
+                CASE 
+                    WHEN ii.ItemID IS NOT NULL THEN TRUE 
+                    ELSE FALSE 
+                END as isOrdered
+            FROM 
+                Item i
+            LEFT JOIN 
+                ItemIn ii ON i.ItemID = ii.ItemID
+            WHERE 
+                i.mainCategory = %s 
+                AND i.subCategory = %s
+            ORDER BY 
+                i.ItemID
+        """
+        
+        cursor.execute(query, (main_category, sub_category))
+        items = cursor.fetchall()
+        
+        # Format the items for JSON response
+        formatted_items = []
+        for item in items:
+            formatted_items.append({
+                'ItemID': item['ItemID'],
+                'Description': item['Description'] or '',  # Using iDescription
+                'Color': item['Color'] or '',
+                'Material': item['Material'] or '',
+                'isNew': bool(item['isNew']),
+                'isOrdered': bool(item['isOrdered'])
+            })
+        
+        return JsonResponse({
+            'items': formatted_items,
+            'status': 'success'
+        })
+        
+    except Exception as e:
+        print(f"Error in get_available_items: {str(e)}")
+        return JsonResponse({
+            'error': str(e),
+            'status': 'error'
+        }, status=500)
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()
+
+@require_http_methods(["POST"])
+def add_to_order(request):
+    try:
+        data = json.loads(request.body)
+        order_id = data.get('orderID')
+        item_id = data.get('itemID')
+        
+        if not order_id or not item_id:
+            return JsonResponse({
+                'error': 'Both orderID and itemID are required'
+            }, status=400)
+            
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Check if item is already in an order
+        check_query = """
+            SELECT 1 FROM ItemIn 
+            WHERE ItemID = %s
+        """
+        cursor.execute(check_query, (item_id,))
+        if cursor.fetchone():
+            return JsonResponse({
+                'error': 'Item is already in an order'
+            }, status=400)
+        
+        # Add item to order
+        insert_query = """
+            INSERT INTO ItemIn (ItemID, orderID, found) 
+            VALUES (%s, %s, FALSE)
+        """
+        cursor.execute(insert_query, (item_id, order_id))
+        conn.commit()
+        
+        return JsonResponse({
+            'message': 'Item added to order successfully'
+        })
+        
+    except Exception as e:
+        print(f"Error in add_to_order: {str(e)}")
+        return JsonResponse({
+            'error': str(e)
+        }, status=500)
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()
+
+@require_http_methods(["POST"])
+def validate_order(request):
+    try:
+        data = json.loads(request.body)
+        order_id = data.get('orderID')
+        
+        if not order_id:
+            return JsonResponse({
+                'error': 'Order ID is required'
+            }, status=400)
+            
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Query to validate order and get client info
+        query = """
+            SELECT 
+                o.orderID,
+                CONCAT(p.fname, ' ', p.lname) as clientName
+            FROM 
+                Ordered o
+                JOIN Person p ON o.client = p.userName
+            WHERE 
+                o.orderID = %s
+        """
+        
+        cursor.execute(query, (order_id,))
+        order = cursor.fetchone()
+        
+        if not order:
+            return JsonResponse({
+                'error': 'Invalid Order ID'
+            }, status=404)
+        
+        return JsonResponse({
+            'message': 'Order validated successfully',
+            'orderID': order['orderID'],
+            'clientName': order['clientName']
+        })
+        
+    except Exception as e:
+        print(f"Error in validate_order: {str(e)}")
+        return JsonResponse({
+            'error': str(e)
+        }, status=500)
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()
+
+def category_rankings_page(request):
+    return render(request, 'category_rankings.html')
+
+
+@require_http_methods(["GET"])
+def category_rankings(request):
+    try:
+        # Get time period from query parameters (default to last 30 days)
+        start_date = request.GET.get('start_date')
+        end_date = request.GET.get('end_date')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Base query for category rankings
+        query = """
+            SELECT 
+                i.mainCategory,
+                i.subCategory,
+                COUNT(DISTINCT o.orderID) as order_count,
+                COUNT(ii.ItemID) as item_count
+            FROM 
+                Item i
+                JOIN ItemIn ii ON i.ItemID = ii.ItemID
+                JOIN Ordered o ON ii.orderID = o.orderID
+            WHERE 
+                o.orderDate BETWEEN %s AND %s
+            GROUP BY 
+                i.mainCategory, 
+                i.subCategory
+            ORDER BY 
+                order_count DESC, 
+                item_count DESC
+            LIMIT 10
+        """
+        
+        # If dates not provided, use last 30 days
+        if not start_date:
+            cursor.execute("SELECT DATE_SUB(CURRENT_DATE, INTERVAL 30 DAY)")
+            start_date = cursor.fetchone()['DATE_SUB(CURRENT_DATE, INTERVAL 30 DAY)']
+        if not end_date:
+            cursor.execute("SELECT CURRENT_DATE")
+            end_date = cursor.fetchone()['CURRENT_DATE']
+            
+        cursor.execute(query, (start_date, end_date))
+        rankings = cursor.fetchall()
+        
+        return JsonResponse({
+            'start_date': start_date.isoformat() if hasattr(start_date, 'isoformat') else start_date,
+            'end_date': end_date.isoformat() if hasattr(end_date, 'isoformat') else end_date,
+            'rankings': rankings
+        })
+        
+    except Exception as e:
+        print(f"Error in category_rankings: {str(e)}")
+        return JsonResponse({
+            'error': str(e)
+        }, status=500)
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()

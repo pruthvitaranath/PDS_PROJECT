@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Find Order Items</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+        }
+        input[type="text"], button {
+            margin-bottom: 10px;
+            padding: 8px;
+        }
+        button {
+            background-color: green;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: darkgreen;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        table th, table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+        table th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Find Order Items</h1>
+
+    <!-- Input Form -->
+    <form id="findOrderItemsForm">
+        <label for="orderID">Enter Order ID:</label>
+        <input type="text" id="orderID" name="orderID" required>
+
+        <button type="submit">Find Items</button>
+    </form>
+
+    <!-- Results Section -->
+    <div id="resultsSection" style="display:none;">
+        <h2>Order Details</h2>
+        <table id="itemsTable">
+            <thead>
+                <tr>
+                    <th>Item ID</th>
+                    <th>Room Number</th>
+                    <th>Shelf Number</th>
+                    <th>Shelf Description</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <!-- Response Message -->
+    <div id="responseMessage"></div>
+</div>
+
+<script>
+// Handle "Find Order Items"
+document.getElementById('findOrderItemsForm').addEventListener('submit', async function (e) {
+    e.preventDefault(); // Prevent default form submission
+
+    const orderID = document.getElementById('orderID').value;
+
+    try {
+        const response = await fetch(`/api/find-order-items/${encodeURIComponent(orderID)}/`);
+        const data = await response.json();
+
+        if (response.ok) {
+            // Populate the results table
+            const itemsTableBody = document.querySelector('#itemsTable tbody');
+            itemsTableBody.innerHTML = ''; // Clear existing rows
+
+            data.items.forEach(item => {
+                item.locations.forEach(location => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${item.itemID}</td>
+                        <td>${location.roomNum}</td>
+                        <td>${location.shelfNum}</td>
+                        <td>${location.shelfDescription}</td>
+                    `;
+                    itemsTableBody.appendChild(row);
+                });
+            });
+
+            // Show results section
+            document.getElementById('resultsSection').style.display = 'block';
+        } else {
+            throw new Error(data.error || 'Failed to fetch order items.');
+        }
+    } catch (error) {
+        document.getElementById('responseMessage').textContent = error.message;
+        document.getElementById('responseMessage').style.color = 'red';
+    }
+});
+</script>
+</body>
+</html>

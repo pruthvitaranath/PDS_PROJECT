@@ -3,6 +3,9 @@ from . import views
 
 urlpatterns = [
     path('login/', views.login_page, name='login'),  # URL for login page
+    path('api/logout/', views.logout, name='logout'),
+
+
     path('api/login/', views.login, name='login-backend'),  # Backend login API
 
     path('register/', views.register_page, name='register'),  # URL for register page
@@ -34,4 +37,20 @@ urlpatterns = [
 
     path('staff-dashboard/', views.staff_dashboard_page, name='staff_dashboard'),
 
+    # URL for find order items page
+    path('find-order-items/', views.find_order_items_page, name='find_order_items'),
+    path('api/find-order-items/<int:order_id>/', views.find_order_items, name='find_order_items_backend'),
+
+
+    #modify the order
+    path('api/categories/', views.get_categories, name='get-categories'),
+    path('api/available-items/', views.get_available_items, name='get-available-items'),
+    path('api/add-to-order/', views.add_to_order, name='add-to-order'),
+
+    path('api/validate-order/', views.validate_order, name='validate-order'),
+
+    path('client-dashboard/', views.client_dashboard_page, name='client_dashboard'),
+
+    path('category-rankings/', views.category_rankings_page, name='category_rankings'),
+    path('api/category-rankings/', views.category_rankings, name='category_rankings'),
 ]

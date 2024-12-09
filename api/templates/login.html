@@ -112,6 +112,8 @@
           // Redirect based on role
           if (result.user.role === 'STAFF') {
             window.location.href = '/staff-dashboard/';
+          } else if (result.user.role === 'CLIENT') {
+            window.location.href = '/client-dashboard/';
           }
           // ... other role redirects
         } else {
