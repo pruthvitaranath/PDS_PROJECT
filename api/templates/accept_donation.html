@@ -139,23 +139,55 @@ document.getElementById('addPieceButton').addEventListener('click', function () 
 
 // Handle form submission
 document.getElementById('donationForm').addEventListener('submit', async function (e) {
-    e.preventDefault(); // Prevent default form submission
+    e.preventDefault();
 
-    // Collect form data
-    const formData = new FormData(document.getElementById('donationForm'));
-    formData.append('numPieces', pieceCount); // Add the number of pieces
-
-    // Get CSRF token from hidden input field
+    // Get CSRF token
     const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    // Collect item data
+    const itemData = [{
+        description: document.getElementById('itemDescription').value,
+        photo: document.getElementById('photo').value,
+        color: document.getElementById('color').value,
+        isNew: document.getElementById('isNew').value === 'true',
+        hasPieces: document.getElementById('hasPieces').value === 'true',
+        material: document.getElementById('material').value,
+        mainCategory: document.getElementById('mainCategory').value,
+        subCategory: document.getElementById('subCategory').value
+    }];
+
+    // Collect pieces data
+    const piecesData = [];
+    for (let i = 1; i <= pieceCount; i++) {
+        piecesData.push({
+            pieceNum: i,
+            description: document.getElementById(`pieceDescription_${i}`).value,
+            length: parseFloat(document.getElementById(`length_${i}`).value),
+            width: parseFloat(document.getElementById(`width_${i}`).value),
+            height: parseFloat(document.getElementById(`height_${i}`).value),
+            roomNum: parseInt(document.getElementById(`roomNum_${i}`).value),
+            shelfNum: parseInt(document.getElementById(`shelfNum_${i}`).value),
+            notes: document.getElementById(`pNotes_${i}`).value
+        });
+    }
+
+    // Create the request payload
+    const payload = {
+        userName: document.getElementById('userName').value,
+        donorID: document.getElementById('donorID').value,
+        itemData: itemData,
+        piecesData: piecesData
+    };
 
     try {
         // Send POST request to the Accept Donation API
         const response = await fetch('/api/accept-donation/', {
             method: 'POST',
             headers: {
-                'X-CSRFToken': csrftoken, // Include CSRF token in headers
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken
             },
-            body: formData,
+            body: JSON.stringify(payload)
         });
 
         // Parse and display the response
@@ -165,16 +197,17 @@ document.getElementById('donationForm').addEventListener('submit', async functio
             document.getElementById('responseMessage').textContent = result.message || "Donation accepted successfully!";
             document.getElementById('responseMessage').style.color = "green";
             
-            // Optionally reset the form after successful submission
+            // Reset the form
             document.getElementById('donationForm').reset();
             document.getElementById('piecesContainer').innerHTML = "";
-            pieceCount = 0; // Reset piece count
+            pieceCount = 0;
         } else {
             throw new Error(result.error || "An error occurred while submitting the donation.");
         }
     } catch (error) {
         document.getElementById('responseMessage').textContent = error.message;
         document.getElementById('responseMessage').style.color = "red";
+        console.error('Error:', error);
     }
 });
 </script>

@@ -238,9 +238,8 @@ def find_order_items(request, order_id):
         conn.close()
 
 
-#@csrf_exempt
+@csrf_exempt
 def accept_donation(request):
-
     print("accept donation api invoked")
     if request.method == "POST":
         conn = get_db_connection()
@@ -249,10 +248,10 @@ def accept_donation(request):
         try:
             # Parse input data
             data = json.loads(request.body)
-            user_name = data.get("userName")  # Staff member username
-            donor_id = data.get("donorID")  # Donor's username
-            item_data = data.get("itemData")  # List of items donated
-            pieces_data = data.get("piecesData")  # List of pieces for each item
+            user_name = data.get("userName")
+            donor_id = data.get("donorID")
+            item_data = data.get("itemData")
+            pieces_data = data.get("piecesData")
 
             # Step 1: Check if the user is a staff member
             staff_check_query = """
@@ -278,25 +277,36 @@ def accept_donation(request):
             if not is_donor_registered:
                 return JsonResponse({"error": "Donor is not registered"}, status=404)
 
-            # Step 3: Process each donated item and store in the database
+            # Step 3: Process each donated item
             for item in item_data:
-                i_description = item.get("description")
-                photo = item.get("photo")
-                color = item.get("color")
-                is_new = item.get("isNew", True)
-                has_pieces = item.get("hasPieces", False)
-                material = item.get("material")
-                main_category = item.get("mainCategory")
-                sub_category = item.get("subCategory")
+                # Validate category exists
+                category_check_query = """
+                    SELECT COUNT(*) 
+                    FROM Category 
+                    WHERE mainCategory = %s AND subCategory = %s
+                """
+                cursor.execute(category_check_query, (item.get("mainCategory"), item.get("subCategory")))
+                category_exists = cursor.fetchone()[0]
 
-                # Insert into Item table and get the auto-incremented ItemID
+                if not category_exists:
+                    return JsonResponse({
+                        "error": f"Invalid category: {item.get('mainCategory')} - {item.get('subCategory')}"
+                    }, status=400)
+
+                # Insert item
                 insert_item_query = """
-                    INSERT INTO Item (iDescription, photo, color, isNew, hasPieces, material, mainCategory, subCategory)
+                    INSERT INTO Item (iDescription, photo, color, isNew, hasPieces, 
+                                    material, mainCategory, subCategory)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """
-                cursor.execute(insert_item_query, (i_description, photo, color, is_new, has_pieces, material, main_category, sub_category))
+                cursor.execute(insert_item_query, (
+                    item.get("description"), item.get("photo"), 
+                    item.get("color"), item.get("isNew", True),
+                    item.get("hasPieces", False), item.get("material"),
+                    item.get("mainCategory"), item.get("subCategory")
+                ))
                 conn.commit()
-                item_id = cursor.lastrowid  # Get the auto-incremented ItemID
+                item_id = cursor.lastrowid
 
                 # Insert into DonatedBy table
                 insert_donated_by_query = """
@@ -306,35 +316,44 @@ def accept_donation(request):
                 cursor.execute(insert_donated_by_query, (item_id, donor_id))
                 conn.commit()
 
-                # Step 4: Process pieces for this item (if applicable)
-                if has_pieces:
+                # Step 4: Process pieces if applicable
+                if item.get("hasPieces"):
                     for piece in pieces_data:
-                        piece_num = piece.get("pieceNum")
-                        p_description = piece.get("description")
-                        length = piece.get("length")
-                        width = piece.get("width")
-                        height = piece.get("height")
-                        room_num = piece.get("roomNum")
-                        shelf_num = piece.get("shelfNum")
-                        p_notes = piece.get("notes")
+                        # Validate location exists
+                        location_check_query = """
+                            SELECT COUNT(*) 
+                            FROM Location 
+                            WHERE roomNum = %s AND shelfNum = %s
+                        """
+                        cursor.execute(location_check_query, (
+                            piece.get("roomNum"), piece.get("shelfNum")
+                        ))
+                        location_exists = cursor.fetchone()[0]
 
+                        if not location_exists:
+                            return JsonResponse({
+                                "error": f"Invalid location: Room {piece.get('roomNum')}, Shelf {piece.get('shelfNum')}"
+                            }, status=400)
+
+                        # Insert piece
                         insert_piece_query = """
-                            INSERT INTO Piece (ItemID, pieceNum, pDescription, length, width, height, roomNum, shelfNum, pNotes)
+                            INSERT INTO Piece (ItemID, pieceNum, pDescription, 
+                                             length, width, height, 
+                                             roomNum, shelfNum, pNotes)
                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                         """
-                        cursor.execute(insert_piece_query,
-                                       (item_id, piece_num, p_description,
-                                        length, width,
-                                        height,
-                                        room_num,
-                                        shelf_num,
-                                        p_notes))
+                        cursor.execute(insert_piece_query, (
+                            item_id, piece.get("pieceNum"), piece.get("description"),
+                            piece.get("length"), piece.get("width"), piece.get("height"),
+                            piece.get("roomNum"), piece.get("shelfNum"), piece.get("notes")
+                        ))
                         conn.commit()
 
             return JsonResponse({"message": "Donation accepted successfully"}, status=201)
 
         except Exception as e:
             conn.rollback()
+            print(f"Error in accept_donation: {str(e)}")
             return JsonResponse({"error": str(e)}, status=500)
 
         finally:
